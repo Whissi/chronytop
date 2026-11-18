@@ -35,6 +35,20 @@ Or build it from source with Go 1.24 or later:
 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o chronytop .
 ```
 
+Package maintainers can set the default command socket path at build time to
+match their chrony package, without patching the source. For example, for a
+chrony build using `--chronyrundir=/run/chrony`:
+
+```
+CGO_ENABLED=0 go build -trimpath \
+  -ldflags "-s -w -X main.defaultSocket=/run/chrony/chronyd.sock" \
+  -o chronytop .
+```
+
+This can be combined with `-X main.version=...`. The `-socket` command-line
+option always overrides the compiled-in default, and `chronytop -h` shows the
+default of the installed binary.
+
 ## Usage
 
 ```
@@ -45,7 +59,7 @@ sudo chronytop
 | --- | --- | --- |
 | `-i` | `1s` | Sample interval (500ms to 10s) |
 | `-p` | `100` | Minimum packets for a client to be listed in offenders |
-| `-socket` | `/var/run/chrony/chronyd.sock` | Absolute path to chronyd's Unix command socket |
+| `-socket` | `/var/run/chrony/chronyd.sock` (build configurable) | Absolute path to chronyd's Unix command socket |
 | `-version` | | Print the version and exit |
 
 | Key | Action |
@@ -64,8 +78,8 @@ Chronyd creates its Unix command socket by default; an explicit `bindcmdaddress`
 directive is only needed to change its location or disable it. Chronytop's
 upstream default is `/var/run/chrony/chronyd.sock`; on systems where `/var/run`
 links to `/run`, this also reaches `/run/chrony/chronyd.sock`. Chronytop does not
-parse `chrony.conf` or discover another binary's compiled-in defaults. Use
-`-socket` for a different location.
+parse `chrony.conf` or discover another binary's compiled-in defaults. Use the
+package build option above or `-socket` for a different location.
 
 Use `-socket /path/to/chronyd.sock` if chronyd uses a custom `bindcmdaddress` path. Two sockets are opened lazily and kept open: one for regular samples and one for the background client list. Each sample gets a fresh two-second deadline; client pagination gets a ten-second deadline for the entire list. A failed socket is closed and reopened on the next scheduled refresh. Valid command rejections do not close the connection. Connection and protocol errors appear in the affected panels. Counters not reported by older chrony versions are omitted from the server panel.
 

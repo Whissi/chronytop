@@ -19,7 +19,10 @@ import (
 // https://github.com/mlichvar/chrony/blob/4.9/candm.h
 // https://github.com/mlichvar/chrony/blob/4.9/pktlength.c
 // Server statistics also use the reply layouts from chrony 4.0 and 4.2.
-const defaultSocket = "/var/run/chrony/chronyd.sock"
+// Distributors can match chrony's compiled-in socket path without patching the
+// source: go build -ldflags "-X main.defaultSocket=/run/chrony/chronyd.sock" .
+// The -socket flag takes precedence over this build-time default.
+var defaultSocket = "/var/run/chrony/chronyd.sock"
 
 const (
 	cmdSources  = 14
