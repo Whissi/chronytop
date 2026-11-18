@@ -13,7 +13,7 @@ Panels resize with the terminal, and can be shown or hidden.
 ## Requirements
 
 - Linux, with chrony 4.0 or later (`/usr/bin/chronyc`)
-- Root (or `sudo`) for the server and client panels, since chronyd only answers those over its root-owned socket
+- Root (or `sudo`) for the server and offenders panels, or see [Running without root](#running-without-root)
 
 chronytop is a single static binary with no dependencies outside the Go standard library, so it runs on any distribution (Debian, Ubuntu, Fedora, RHEL, Arch, Alpine, etc.).
 
@@ -55,9 +55,29 @@ Visible panels and the sample interval are saved when you quit, to `~/.config/ch
 
 The offenders list is refreshed every 10 seconds in the background. chronyd filters clients by `-p` itself, so the list stays cheap to fetch on busy public servers with hundreds of thousands of clients.
 
+## Running without root
+
+Any user can see the tracking, sources, net, and system panels. The server and offenders panels use chronyd's `serverstats` and `clients` commands, which chronyd only answers over its Unix socket in `/run/chrony` by default.
+
+**chrony 4.7 or later:** allow those two commands for local users with `opencommands` in `chrony.conf` (`/etc/chrony/chrony.conf` on Debian and Ubuntu, `/etc/chrony.conf` elsewhere). The list replaces the defaults, so it repeats them:
+
+```
+opencommands activity manual rtcdata smoothing sourcename sources sourcestats tracking serverstats clients
+```
+
+Then restart chronyd (`sudo systemctl restart chrony`, or `chronyd` on Fedora and RHEL) and run `chronytop` as any user. Only localhost can send these queries unless `cmdallow` says otherwise.
+
+**Older versions:** add your user to chrony's group (`_chrony` on Debian and Ubuntu, `chrony` on Fedora, RHEL, and Arch), then log out and back in:
+
+```
+sudo usermod -aG _chrony $USER
+```
+
+This gives full access to chronyd's control socket, not just its stats, so members of the group can also step the clock or change sources.
+
 ## Security
 
-Since it runs as root, chronytop:
+Since it usually runs as root, chronytop:
 
 - Only reads from `/proc` and `chronyc`, and never opens network connections.
 - Only writes its settings file, and only if you changed a setting. It skips the file and its directories unless they're owned by the user running chronytop (so a non-root `HOME` under `sudo` is ignored), and saves through a temporary file, so it never follows a symlink.
