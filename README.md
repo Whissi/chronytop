@@ -49,13 +49,16 @@ sudo chronytop
 | `Esc` | Close help, or quit |
 | `q` | Quit |
 
+Visible panels and the sample interval are saved when you quit, to `~/.config/chronytop/chronytop.conf` (`/root/.config/...` when run with `sudo`), and restored on the next run. `-i` overrides the saved interval.
+
 The offenders list is refreshed every 10 seconds in the background. chronyd filters clients by `-p` itself, so the list stays cheap to fetch on busy public servers with hundreds of thousands of clients.
 
 ## Security
 
 Since it runs as root, chronytop:
 
-- Only reads from `/proc` and `chronyc`, and never writes files or opens network connections.
+- Only reads from `/proc` and `chronyc`, and never opens network connections.
+- Only writes its settings file, and only if you changed a setting. It skips the file and its directories unless they're owned by the user running chronytop (so a non-root `HOME` under `sudo` is ignored), and saves through a temporary file, so it never follows a symlink.
 - Runs `/usr/bin/chronyc` by absolute path, with a minimal environment and no shell.
 - Strips non-printable characters from everything it displays, so data from chrony can't inject terminal escape sequences.
 
