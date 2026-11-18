@@ -38,11 +38,11 @@ type Stats struct {
 }
 
 type snapshot struct {
-	at                          time.Time
-	server, net                 []float64
-	cpuBusy, cpuTotal           float64
-	chronydSecs, ownSecs        float64
-	chronydFound, chronydSample bool
+	at                   time.Time
+	server, net          []float64
+	cpuBusy, cpuTotal    float64
+	chronydSecs, ownSecs float64
+	chronydFound         bool
 }
 
 // Sample takes one sample of everything except the client list.
