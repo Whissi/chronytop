@@ -67,13 +67,19 @@ opencommands activity manual rtcdata smoothing sourcename sources sourcestats tr
 
 Then restart chronyd (`sudo systemctl restart chrony`, or `chronyd` on Fedora and RHEL) and run `chronytop` as any user. Only localhost can send these queries unless `cmdallow` says otherwise.
 
-**Older versions:** add your user to chrony's group (`_chrony` on Debian and Ubuntu, `chrony` on Fedora, RHEL, and Arch), then log out and back in:
+**Older versions:** adding your user to chrony's group (`_chrony` on Debian and Ubuntu, `chrony` on Fedora, RHEL, and Arch) only works if that group can write to `/run/chrony`, since `chronyc` creates its own reply socket there. Check with:
+
+```
+ls -ld /run/chrony
+```
+
+If it shows `drwxrwx---`, add your user to the group, then log out and back in:
 
 ```
 sudo usermod -aG _chrony $USER
 ```
 
-This gives full access to chronyd's control socket, not just its stats, so members of the group can also step the clock or change sources.
+Debian and Ubuntu create the directory with mode `0700` (`drwx------`), so this doesn't work there; use `sudo` instead. Where it does work, it gives full access to chronyd's control socket, not just its stats, so members of the group can also step the clock or change sources.
 
 ## Security
 
