@@ -99,3 +99,17 @@ func TestSettings(t *testing.T) {
 		t.Errorf("parse: %+v", s)
 	}
 }
+
+func TestServerLinesFieldCounts(t *testing.T) {
+	cases := map[string]int{
+		"12080,0,4958284,0,0,0,0,0":              6, // chrony 4.0
+		"887837,13218,628,0,0,0,0,0,42,43,30350": 7, // chrony 4.3
+		"":                                       1,
+	}
+	for csv, want := range cases {
+		st := &Stats{Server: parseServerStats(parseCSV(csv))}
+		if got := len(serverLines(st, 50)); got != want {
+			t.Errorf("%q: got %d lines, want %d", csv, got, want)
+		}
+	}
+}
