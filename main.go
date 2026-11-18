@@ -9,7 +9,6 @@ import (
 	"math"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
@@ -46,6 +45,7 @@ type App struct {
 	minPackets int
 	help       bool
 	host       string
+	network    string
 	address    string
 }
 
@@ -53,6 +53,7 @@ func main() {
 	interval := flag.Duration("i", time.Second, "sample interval (500ms to 10s)")
 	minPackets := flag.Int("p", 100, "minimum packets for a client to be listed in offenders")
 	socketPath := flag.String("socket", defaultSocket, "absolute path to chronyd's Unix command socket")
+	udpHost := flag.String("host", "", "monitor chronyd over UDP: hostname, IP, or host:port (default port 323)")
 	showVersion := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
 	if *showVersion {
@@ -63,17 +64,28 @@ func main() {
 		fmt.Fprintln(os.Stderr, "chronytop: -p must fit an unsigned 32-bit integer")
 		os.Exit(2)
 	}
-	intervalFlag := false
-	flag.Visit(func(f *flag.Flag) { intervalFlag = intervalFlag || f.Name == "i" })
-	if !filepath.IsAbs(*socketPath) {
-		fmt.Fprintln(os.Stderr, "chronytop: chrony socket path must be absolute")
+	intervalFlag, socketFlag := false, false
+	flag.Visit(func(f *flag.Flag) {
+		intervalFlag = intervalFlag || f.Name == "i"
+		socketFlag = socketFlag || f.Name == "socket"
+	})
+	network, address, err := monitorAddress(*socketPath, *udpHost, socketFlag)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "chronytop:", err)
 		os.Exit(2)
 	}
 
 	host, _ := os.Hostname()
+	iface := ""
+	if network == "udp" {
+		host = address
+	} else {
+		iface = defaultIface()
+	}
 	app := &App{
-		stats:      Stats{Iface: defaultIface()},
-		address:    *socketPath,
+		stats:      Stats{Iface: iface},
+		network:    network,
+		address:    address,
 		visible:    map[string]bool{},
 		interval:   min(maxInterval, max(minInterval, *interval)),
 		minPackets: *minPackets,
@@ -127,8 +139,8 @@ type clientsResult struct {
 
 func (a *App) run() {
 	ctx, cancel := context.WithCancel(context.Background())
-	sampler := &chronySession{address: a.address}
-	clientSession := &chronySession{address: a.address}
+	sampler := &chronySession{network: a.network, address: a.address}
+	clientSession := &chronySession{network: a.network, address: a.address}
 	var workers sync.WaitGroup
 	defer func() {
 		cancel()
@@ -215,9 +227,13 @@ func (a *App) handleKey(k byte) bool {
 	case '-':
 		a.interval = max(minInterval, a.interval/2)
 	default:
-		if _, ok := a.visible[string(k)]; ok {
+		if _, ok := a.visible[string(k)]; ok && a.panelAvailable(string(k)) {
 			a.visible[string(k)] = !a.visible[string(k)]
 		}
 	}
 	return false
+}
+
+func (a *App) panelAvailable(key string) bool {
+	return a.network != "udp" || (key != "6" && key != "7")
 }

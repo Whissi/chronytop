@@ -54,19 +54,21 @@ func (s *Stats) Sample(ctx context.Context, session *chronySession) {
 	now := time.Now()
 	s.sampleChrony(ctx, session)
 	snap := &snapshot{at: now, server: s.Server}
-	s.Net = netCounters(s.Iface)
-	snap.net = s.Net
-	snap.cpuBusy, snap.cpuTotal = cpuTicks()
-	if s.chronydPID == "" {
-		s.chronydPID = findPID("chronyd")
+	if session.network != "udp" {
+		s.Net = netCounters(s.Iface)
+		snap.net = s.Net
+		snap.cpuBusy, snap.cpuTotal = cpuTicks()
+		if s.chronydPID == "" {
+			s.chronydPID = findPID("chronyd")
+		}
+		if secs, rss, ok := procUsage(s.chronydPID); ok {
+			snap.chronydSecs, snap.chronydFound, s.ChronydRSS = secs, true, rss
+		} else {
+			s.chronydPID, s.ChronydRSS = "", 0
+		}
+		snap.ownSecs = ownCPUSeconds()
+		s.MemTotal, s.MemUsed = memInfo()
 	}
-	if secs, rss, ok := procUsage(s.chronydPID); ok {
-		snap.chronydSecs, snap.chronydFound, s.ChronydRSS = secs, true, rss
-	} else {
-		s.chronydPID, s.ChronydRSS = "", 0
-	}
-	snap.ownSecs = ownCPUSeconds()
-	s.MemTotal, s.MemUsed = memInfo()
 
 	if p := s.prev; p != nil {
 		dt := now.Sub(p.at).Seconds()

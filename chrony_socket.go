@@ -44,6 +44,7 @@ var wire = binary.BigEndian
 // chronySession owns one persistent socket. It is used serially by one worker;
 // the sampler and the client-list worker each have their own session.
 type chronySession struct {
+	network string
 	address string
 	socket  *chronySocket
 }
@@ -60,12 +61,17 @@ func (s *chronySession) run(ctx context.Context, timeout time.Duration, query fu
 		deadline = d
 	}
 	if s.socket == nil {
-		s.socket, err = openChrony(s.address)
+		if s.network == "udp" {
+			s.socket, err = openChronyUDP(ctx, s.address, deadline)
+		} else {
+			s.socket, err = openChrony(s.address)
+		}
 		if err != nil {
 			return err
 		}
 	}
 	c := s.socket
+	c.deadline = deadline
 	if err := c.conn.SetDeadline(deadline); err != nil {
 		s.Close()
 		return err
@@ -101,6 +107,8 @@ func (s *chronySession) Close() {
 
 type chronySocket struct {
 	conn     net.Conn
+	udp      bool
+	deadline time.Time
 	dir      string
 	dirFD    int
 	parentFD int
@@ -108,6 +116,22 @@ type chronySocket struct {
 	replyDir string
 	replyFD  int
 	sequence uint32
+}
+
+func openChronyUDP(ctx context.Context, address string, deadline time.Time) (*chronySocket, error) {
+	dialer := net.Dialer{Deadline: deadline}
+	conn, err := dialer.DialContext(ctx, "udp", address)
+	if err != nil {
+		return nil, fmt.Errorf("connect to chronyd at %s: %w", address, err)
+	}
+	// A connected UDP socket filters the sender address. Randomising the initial
+	// sequence also makes off-path reply guessing harder (it is not authentication).
+	var sequence [4]byte
+	if _, err := rand.Read(sequence[:]); err != nil {
+		_ = conn.Close()
+		return nil, err
+	}
+	return &chronySocket{conn: conn, udp: true, parentFD: -1, dirFD: -1, replyFD: -1, sequence: wire.Uint32(sequence[:])}, nil
 }
 
 func openChrony(path string) (*chronySocket, error) {
@@ -269,13 +293,39 @@ func (c *chronySocket) query(command uint16, args ...uint32) ([]byte, uint16, er
 		}
 		wire.PutUint32(request[20+4*i:], arg)
 	}
-	if _, err := c.conn.Write(request); err != nil {
+	attempt := uint16(0)
+	retryDelay := 250 * time.Millisecond
+	send := func() error {
+		if c.udp {
+			// Retry lost UDP packets without extending the query group's deadline.
+			until := time.Now().Add(retryDelay)
+			if c.deadline.Before(until) {
+				until = c.deadline
+			}
+			if err := c.conn.SetReadDeadline(until); err != nil {
+				return err
+			}
+		}
+		wire.PutUint16(request[6:], attempt)
+		_, err := c.conn.Write(request)
+		return err
+	}
+	if err := send(); err != nil {
 		return nil, 0, err
 	}
 	buf := make([]byte, 4096)
 	for {
 		n, err := c.conn.Read(buf)
 		if err != nil {
+			var netErr net.Error
+			if c.udp && errors.As(err, &netErr) && netErr.Timeout() && attempt < 2 && time.Now().Before(c.deadline) {
+				attempt++
+				retryDelay *= 2
+				if err := send(); err != nil {
+					return nil, 0, err
+				}
+				continue
+			}
 			return nil, 0, err
 		}
 		if n < replyHeader {
@@ -288,7 +338,7 @@ func (c *chronySocket) query(command uint16, args ...uint32) ([]byte, uint16, er
 			return nil, 0, errors.New("unsupported chrony reply header or protocol version")
 		}
 		if status := wire.Uint16(buf[8:]); status != 0 {
-			return nil, 0, &chronyCommandError{command: command, status: status}
+			return nil, 0, &chronyCommandError{command: command, status: status, udp: c.udp}
 		}
 		kind := wire.Uint16(buf[6:])
 		length := 0
@@ -319,10 +369,14 @@ func (c *chronySocket) query(command uint16, args ...uint32) ([]byte, uint16, er
 
 type chronyCommandError struct {
 	command, status uint16
+	udp             bool
 }
 
 func (e *chronyCommandError) Error() string {
 	message := chronyStatus(e.status)
+	if e.status == 2 && e.udp {
+		message = "not authorised over UDP (check chronyd cmdallow/opencommands)"
+	}
 	return fmt.Sprintf("chronyd %s: %s", chronyCommandName(e.command), message)
 }
 
@@ -343,8 +397,8 @@ func chronyCommandName(command uint16) string {
 	}
 }
 
-// A valid command rejection does not mean the socket is broken.
-// Handle errors.Join from a sample with several commands.
+// A valid rejection (e.g. serverstats is not enabled over UDP) does not mean
+// the socket is broken. Handle errors.Join from a sample with several commands.
 func commandErrorsOnly(err error) bool {
 	if joined, ok := err.(interface{ Unwrap() []error }); ok {
 		for _, child := range joined.Unwrap() {
