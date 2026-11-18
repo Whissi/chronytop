@@ -2,11 +2,13 @@
 
 [![CI](https://github.com/geerlingguy/chronytop/actions/workflows/ci.yml/badge.svg)](https://github.com/geerlingguy/chronytop/actions/workflows/ci.yml)
 
-A btop-style terminal dashboard for [chrony](https://chrony-project.org) NTP servers.
+A TUI for [chrony](https://chrony-project.org) NTP time server monitoring, in the style of [btop](https://github.com/aristocratos/btop).
+
+![chronytop screenshot](resources/screenshot.png)
 
 It graphs NTP requests per second, and shows server counters, the clients chrony is rate limiting the most, sources, tracking, bandwidth, and CPU and memory use (including chronyd's).
 
-Panels resize with the terminal, and any of them can be hidden.
+Panels resize with the terminal, and can be shown or hidden.
 
 ## Requirements
 
