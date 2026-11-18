@@ -1,6 +1,11 @@
 package main
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+)
 
 func TestFormat(t *testing.T) {
 	cases := []struct{ got, want string }{
@@ -50,5 +55,47 @@ func TestParse(t *testing.T) {
 	ss := parseServerStats(parseCSV("887837,13218,628,0,0,0,0,0,42,43,30350\n"))
 	if len(ss) != 11 || ss[1] != 13218 {
 		t.Errorf("serverstats: %v", ss)
+	}
+}
+
+func TestSettings(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if _, ok := loadSettings(); ok {
+		t.Fatal("settings shouldn't exist yet")
+	}
+	want := Settings{Shown: map[string]bool{"requests": true, "tracking": true}, Interval: 2 * time.Second}
+	if err := saveSettings(want); err != nil {
+		t.Fatal(err)
+	}
+	got, ok := loadSettings()
+	if !ok || got.String() != want.String() || got.Shown["server"] {
+		t.Errorf("got %q, want %q", got, want)
+	}
+
+	// A symlinked settings file is ignored, and replaced (not followed) on save.
+	dir := filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "chronytop")
+	target := filepath.Join(t.TempDir(), "target")
+	if err := os.WriteFile(target, []byte("keep"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, configName)
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, path); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := loadSettings(); ok {
+		t.Error("symlinked settings should be ignored")
+	}
+	if err := saveSettings(want); err != nil {
+		t.Fatal(err)
+	}
+	if data, _ := os.ReadFile(target); string(data) != "keep" {
+		t.Error("save followed a symlink")
+	}
+
+	if s := parseSettings("interval = 1h\nbogus\n"); s.Interval != maxInterval || s.Shown != nil {
+		t.Errorf("parse: %+v", s)
 	}
 }

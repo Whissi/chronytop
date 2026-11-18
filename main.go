@@ -69,6 +69,19 @@ func main() {
 	for _, p := range panels {
 		app.visible[p.key] = true
 	}
+	intervalFlag := false
+	flag.Visit(func(f *flag.Flag) { intervalFlag = intervalFlag || f.Name == "i" })
+	if saved, ok := loadSettings(); ok {
+		if saved.Shown != nil {
+			for _, p := range panels {
+				app.visible[p.key] = saved.Shown[p.title]
+			}
+		}
+		if saved.Interval > 0 && !intervalFlag {
+			app.interval = saved.Interval
+		}
+	}
+	before := app.settings().String()
 
 	fd := os.Stdin.Fd()
 	old, err := makeRaw(fd)
@@ -82,6 +95,18 @@ func main() {
 		restore(fd, old)
 	}()
 	app.run()
+	// Only write the settings file when something changed.
+	if s := app.settings(); s.String() != before {
+		_ = saveSettings(s)
+	}
+}
+
+func (a *App) settings() Settings {
+	s := Settings{Shown: map[string]bool{}, Interval: a.interval}
+	for _, p := range panels {
+		s.Shown[p.title] = a.visible[p.key]
+	}
+	return s
 }
 
 type clientsResult struct {
