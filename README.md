@@ -4,7 +4,7 @@
 
 A TUI for [chrony](https://chrony-project.org) NTP time server monitoring, in the style of [btop](https://github.com/aristocratos/btop).
 
-![chronytop screenshot](resources/screenshot.png)
+![chronytop demo](resources/chronytop.gif)
 
 It graphs NTP requests per second, and shows server counters, the clients chrony is rate limiting the most, sources, tracking, bandwidth, and CPU and memory use (including chronyd's).
 
