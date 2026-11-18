@@ -2,11 +2,15 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -42,25 +46,34 @@ type App struct {
 	minPackets int
 	help       bool
 	host       string
+	address    string
 }
 
 func main() {
 	interval := flag.Duration("i", time.Second, "sample interval (500ms to 10s)")
 	minPackets := flag.Int("p", 100, "minimum packets for a client to be listed in offenders")
+	socketPath := flag.String("socket", defaultSocket, "absolute path to chronyd's Unix command socket")
 	showVersion := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
 	if *showVersion {
 		fmt.Println("chronytop", version)
 		return
 	}
-	if *minPackets < 0 {
-		fmt.Fprintln(os.Stderr, "chronytop: -p must be 0 or more")
+	if *minPackets < 0 || uint64(*minPackets) > math.MaxUint32 {
+		fmt.Fprintln(os.Stderr, "chronytop: -p must fit an unsigned 32-bit integer")
+		os.Exit(2)
+	}
+	intervalFlag := false
+	flag.Visit(func(f *flag.Flag) { intervalFlag = intervalFlag || f.Name == "i" })
+	if !filepath.IsAbs(*socketPath) {
+		fmt.Fprintln(os.Stderr, "chronytop: chrony socket path must be absolute")
 		os.Exit(2)
 	}
 
 	host, _ := os.Hostname()
 	app := &App{
 		stats:      Stats{Iface: defaultIface()},
+		address:    *socketPath,
 		visible:    map[string]bool{},
 		interval:   min(maxInterval, max(minInterval, *interval)),
 		minPackets: *minPackets,
@@ -69,8 +82,6 @@ func main() {
 	for _, p := range panels {
 		app.visible[p.key] = true
 	}
-	intervalFlag := false
-	flag.Visit(func(f *flag.Flag) { intervalFlag = intervalFlag || f.Name == "i" })
 	if saved, ok := loadSettings(); ok {
 		if saved.Shown != nil {
 			for _, p := range panels {
@@ -115,24 +126,38 @@ type clientsResult struct {
 }
 
 func (a *App) run() {
+	ctx, cancel := context.WithCancel(context.Background())
+	sampler := &chronySession{address: a.address}
+	clientSession := &chronySession{address: a.address}
+	var workers sync.WaitGroup
+	defer func() {
+		cancel()
+		workers.Wait()
+		sampler.Close()
+		clientSession.Close()
+	}()
 	keys := make(chan byte, 16)
 	go readKeys(keys)
 	sigs := make(chan os.Signal, 4)
 	signal.Notify(sigs, syscall.SIGWINCH, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
+	defer signal.Stop(sigs)
 	results := make(chan clientsResult, 1)
 	fetching, nextClients := false, time.Time{}
 	minPackets := a.minPackets
 	timer := time.NewTimer(0)
+	defer timer.Stop()
 
 	for {
 		select {
 		case <-timer.C:
-			a.stats.Sample()
+			a.stats.Sample(ctx, sampler)
 			// The client list can be long, so fetch it in the background and less often.
 			if !fetching && a.visible["3"] && time.Now().After(nextClients) {
 				fetching = true
+				workers.Add(1)
 				go func() {
-					c, err := fetchClients(minPackets)
+					defer workers.Done()
+					c, err := clientSession.clients(ctx, minPackets)
 					results <- clientsResult{c, err}
 				}()
 			}

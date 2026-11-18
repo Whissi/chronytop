@@ -126,6 +126,10 @@ func (a *App) header(w int) {
 
 func (a *App) requests(y, h, w int) {
 	st := &a.stats
+	if st.ServerErr != nil {
+		a.panel(y, 0, h, w, "1", "requests", unavailable("Request counters", st.ServerErr))
+		return
+	}
 	vis := st.Req
 	if len(vis) > w-2 {
 		vis = vis[len(vis)-(w-2):]
