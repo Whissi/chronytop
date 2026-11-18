@@ -13,7 +13,7 @@ Panels resize with the terminal, and can be shown or hidden.
 ## Requirements
 
 - Linux, with a running chronyd 4.0 or later
-- For Unix socket access: root (or `sudo`), or a user with access to the socket and write permission in its directory; see [Running without root](#running-without-root)
+- For Unix socket access: root (or `sudo`), or a user with access to the socket; see [Running without root](#running-without-root)
 - For UDP access: a reachable chronyd command port and permission for the client's IP address and the requested monitoring commands; local root privileges are not required
 
 chronytop is a single static binary with no dependencies outside the Go standard library, so it runs on any distribution (Debian, Ubuntu, Fedora, RHEL, Arch, Alpine, etc.).
@@ -27,7 +27,7 @@ The transport is selected explicitly: `-host` uses UDP; otherwise chronytop uses
 Download the binary for your architecture from [Releases](https://github.com/geerlingguy/chronytop/releases), and install it:
 
 ```
-sudo install -o root -g root -m 755 chronytop-linux-amd64 /usr/local/bin/chronytop
+sudo install --owner=root --group=root --mode=755 chronytop-linux-amd64 /usr/local/bin/chronytop
 ```
 
 Or build it from source with Go 1.24 or later:
@@ -128,43 +128,23 @@ preferences for Unix socket mode.
 
 ## Running without root
 
-Use `chronytop -host 127.0.0.1` to monitor the local daemon over UDP without
-access to its Unix socket. Tracking and sources are normally available to
-local users. The server and offenders panels use `serverstats` and `clients`,
-which chronyd only answers over its Unix socket by default. UDP mode omits
-the local system/network panels, uptime and load as described above.
-
-**chrony 4.7 or later:** allow those two commands over UDP with `opencommands`
-in `chrony.conf` (`/etc/chrony/chrony.conf` on Debian and Ubuntu,
-`/etc/chrony.conf` elsewhere). The list replaces the defaults, so it repeats
-them:
+To run chronytop locally as user `foo`, that user needs access to chronyd's
+Unix command socket. Add `foo` to the group under which chronyd runs, if that
+group has the required access. The group name depends on the system, for
+example `chrony`, `_chrony`, or `ntp`. For the group `chrony`:
 
 ```
-opencommands activity manual rtcdata smoothing sourcename sources sourcestats tracking serverstats clients
+sudo usermod --append --groups chrony foo
 ```
 
-Then restart chronyd (`sudo systemctl restart chrony`, or `chronyd` on Fedora
-and RHEL) and run `chronytop -host 127.0.0.1` as any user. Only localhost can
-send these queries unless `cmdallow` says otherwise. This changes UDP command
-access; it does not grant access to the Unix socket or change the transport
-selected by chronytop.
+Log out and back in for the new group membership to take effect. Depending
+on file permissions, this group may also allow changes to `/etc/chrony/`
+or other Chrony files. ACLs can grant `foo` the required access without
+granting all the group's other permissions.
 
-**Unix socket access (all supported chrony versions):**
-
-Unix socket mode requires permission to access chronyd's socket and to create
-reply sockets in the same directory. On installations that grant these
-permissions to chrony's group (`_chrony` on Debian and Ubuntu, `chrony` on
-Fedora, RHEL, and Arch), add your user to that group, then log out and back in:
-
-```
-sudo usermod -aG _chrony $USER
-```
-
-Group membership alone is not sufficient if the socket directory is not
-writable by the group. Check the distribution's socket directory permissions.
-Access to chronyd's control socket permits more than reading its statistics:
-group members can also step the clock or change sources with other clients.
-Chronytop itself only sends monitoring commands.
+Either method allows administrative commands through chronyd's socket.
+Chronytop itself only sends monitoring commands and manages its own reply
+sockets.
 
 ## Security
 
