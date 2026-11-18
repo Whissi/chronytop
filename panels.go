@@ -67,7 +67,7 @@ func last(v []float64) float64 {
 
 func serverLines(st *Stats, _ int) []line {
 	s := st.Server
-	if len(s) < 9 {
+	if len(s) < 2 {
 		return []line{{{"chronyc serverstats unavailable (run with sudo)", red}}}
 	}
 	drop := last(st.Drop)
@@ -81,15 +81,25 @@ func serverLines(st *Stats, _ int) []line {
 	if s[1] > 0 {
 		totalSt = yellow
 	}
-	return []line{
+	lines := []line{
 		kv("Requests/s", fmtSI(last(st.Req), ""), green.bold()),
 		kv("Dropped/s", fmtSI(drop, ""), dropSt),
 		kv("Dropped total", fmt.Sprintf("%.2f%%", pct), totalSt),
-		kv("NTP received", fmtCount(s[0]), plain),
-		kv("NTP dropped", fmtCount(s[1]), plain),
-		kv("Clientlog dropped", fmtCount(s[4]), plain),
-		kv("Interleaved NTP", fmtCount(s[8]), plain),
 	}
+	for _, f := range serverStatsFields {
+		if f.index < len(s) {
+			lines = append(lines, kv(f.label, fmtCount(s[f.index]), plain))
+		}
+	}
+	return lines
+}
+
+// Counters from chronyc -c serverstats; older chrony versions print fewer fields (4.0 has 8).
+var serverStatsFields = []struct {
+	index int
+	label string
+}{
+	{0, "NTP received"}, {1, "NTP dropped"}, {4, "Clientlog dropped"}, {8, "Interleaved NTP"},
 }
 
 func offenderLines(st *Stats, w, maxRows, minPackets int) []line {
