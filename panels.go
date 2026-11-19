@@ -185,14 +185,20 @@ func sourcesLines(st *Stats, w int) []line {
 		if len(name) > width {
 			name = name[:width]
 		}
-		lines = append(lines, line{
+		row := line{
 			{fmt.Sprintf("%s%s %-*s ", s.Mode, s.State, width, name), stateSt},
 			{fmt.Sprintf("%2s %5s ", s.Stratum, fmtLog2(s.Poll)), plain},
 			{fmt.Sprintf("%5s ", s.Reach), reachSt},
 			{fmt.Sprintf("%4s ", fmtAgo(s.LastRx)), plain},
-			{fmt.Sprintf("%8s ", fmtSecs(s.Offset, true)), offsetStyle(s.Offset)},
-			{fmt.Sprintf("%7s", fmtSecs(s.Err, false)), dim},
-		})
+		}
+		if s.LastRx >= neverSampled {
+			row = append(row, seg{fmt.Sprintf("%8s %7s", "-", "-"), dim})
+		} else {
+			row = append(row,
+				seg{fmt.Sprintf("%8s ", fmtSecs(s.Offset, true)), offsetStyle(s.Offset)},
+				seg{fmt.Sprintf("%7s", fmtSecs(s.Err, false)), dim})
+		}
+		lines = append(lines, row)
 	}
 	return lines
 }

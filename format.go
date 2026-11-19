@@ -73,10 +73,15 @@ func fmtDur(sec float64) string {
 	return fmt.Sprintf("%ds", s)
 }
 
+// neverSampled is the LastRx chronyc reports for a source with no samples yet.
+const neverSampled = math.MaxUint32
+
 // fmtAgo formats seconds as one short unit, like chronyc's LastRx column.
 func fmtAgo(sec float64) string {
 	s := int64(sec)
 	switch {
+	case sec >= neverSampled:
+		return "-"
 	case s < 60:
 		return fmt.Sprintf("%ds", s)
 	case s < 3600:

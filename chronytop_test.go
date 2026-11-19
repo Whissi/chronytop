@@ -18,6 +18,7 @@ func TestFormat(t *testing.T) {
 		{fmtBytes(1536), "1.5 KiB"},
 		{fmtDur(3725), "1h 2m"},
 		{fmtAgo(1016), "16m"},
+		{fmtAgo(4294967295), "-"},
 		{fmtLog2(-3), "0.12s"},
 		{fmtLog2(10), "1024s"},
 		{fmtLog2(unknownInterval), "-"},
