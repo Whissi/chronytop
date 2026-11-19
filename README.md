@@ -166,6 +166,18 @@ sudo env CHRONYTOP_TEST_SOCKET=/run/chrony/chronyd.sock go test -run TestSocketL
 CHRONYTOP_TEST_UDP=127.0.0.1:323 go test -run TestUDPLive -v
 ```
 
+GitHub Actions also tests against the chronyd packages from Debian oldoldstable,
+oldstable, stable and testing, Fedora latest and rawhide, and Arch Linux latest.
+These image tags follow their distributions as they advance. Service startup is
+blocked during package installation; the tests then run in containers with
+external networking disabled. They start an isolated daemon, generate NTP traffic
+over loopback and check our Unix and UDP queries directly, without public NTP
+servers, system clock changes or `chronyc`. To run this integration test locally:
+
+```
+CHRONYTOP_TEST_CHRONYD="$(command -v chronyd)" go test -run TestChronydIntegration -v
+```
+
 ## License
 
 MIT
