@@ -57,9 +57,10 @@ var commands = map[uint16]struct {
 // chronySession owns one persistent socket. It is used serially by one worker;
 // the sampler and the client-list worker each have their own session.
 type chronySession struct {
-	network string
-	address string
-	socket  *chronySocket
+	network  string
+	address  string
+	fallback bool // UDP because the default socket was inaccessible
+	socket   *chronySocket
 }
 
 // run renews the deadline for a complete query group, including all pages.
@@ -76,6 +77,9 @@ func (s *chronySession) run(ctx context.Context, timeout time.Duration, query fu
 	if s.socket == nil {
 		if s.network == "udp" {
 			s.socket, err = openChronyUDP(ctx, s.address, deadline)
+			if err == nil {
+				s.socket.fallback = s.fallback
+			}
 		} else {
 			s.socket, err = openChrony(s.address)
 		}
@@ -121,6 +125,7 @@ func (s *chronySession) Close() {
 type chronySocket struct {
 	conn     net.Conn
 	udp      bool
+	fallback bool
 	deadline time.Time
 	dir      string
 	dirFD    int
@@ -339,7 +344,7 @@ func (c *chronySocket) query(command uint16, args ...uint32) ([]byte, uint16, er
 			return nil, 0, errors.New("unsupported chrony reply header or protocol version")
 		}
 		if status := wire.Uint16(buf[8:]); status != 0 {
-			return nil, 0, &chronyCommandError{command: command, status: status, udp: c.udp}
+			return nil, 0, &chronyCommandError{command: command, status: status, udp: c.udp, fallback: c.fallback}
 		}
 		kind := wire.Uint16(buf[6:])
 		length, ok := cmd.replies[kind]
@@ -355,12 +360,14 @@ func (c *chronySocket) query(command uint16, args ...uint32) ([]byte, uint16, er
 
 type chronyCommandError struct {
 	command, status uint16
-	udp             bool
+	udp, fallback   bool
 }
 
 func (e *chronyCommandError) Error() string {
 	message := chronyStatus(e.status)
-	if e.status == 2 && e.udp {
+	if e.status == 2 && e.fallback {
+		message = "not authorised over UDP (use sudo)"
+	} else if e.status == 2 && e.udp {
 		message = "not authorised over UDP (check chronyd cmdallow/opencommands)"
 	}
 	return fmt.Sprintf("chronyd %s: %s", chronyCommandName(e.command), message)

@@ -224,6 +224,13 @@ func TestMonitorAddress(t *testing.T) {
 	}
 }
 
+func TestFallbackHint(t *testing.T) {
+	err := &chronyCommandError{command: cmdServer, status: 2, udp: true, fallback: true}
+	if !strings.Contains(err.Error(), "use sudo") {
+		t.Errorf("fallback error lacks sudo hint: %v", err)
+	}
+}
+
 func TestIsRemote(t *testing.T) {
 	for address, want := range map[string]bool{"127.0.0.1:323": false, "[::1]:323": false, "localhost:323": false,
 		"192.0.2.10:323": true, "ntp.example:323": true} {

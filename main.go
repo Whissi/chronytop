@@ -48,6 +48,7 @@ type App struct {
 	host       string
 	network    string
 	address    string
+	fallback   bool
 }
 
 func main() {
@@ -75,12 +76,13 @@ func main() {
 		fmt.Fprintln(os.Stderr, "chronytop:", err)
 		os.Exit(2)
 	}
+	fallback := false
 	if network == "unixgram" && !socketFlag {
 		// Like chronyc, use localhost UDP when the default socket isn't accessible.
 		if c, err := openChrony(address); err == nil {
 			c.Close()
 		} else if errors.Is(err, os.ErrPermission) {
-			network, address = "udp", "127.0.0.1:323"
+			network, address, fallback = "udp", "127.0.0.1:323", true
 		}
 	}
 
@@ -95,6 +97,7 @@ func main() {
 		stats:      Stats{Iface: iface},
 		network:    network,
 		address:    address,
+		fallback:   fallback,
 		visible:    map[string]bool{},
 		interval:   min(maxInterval, max(minInterval, *interval)),
 		minPackets: *minPackets,
@@ -148,8 +151,8 @@ type clientsResult struct {
 
 func (a *App) run() {
 	ctx, cancel := context.WithCancel(context.Background())
-	sampler := &chronySession{network: a.network, address: a.address}
-	clientSession := &chronySession{network: a.network, address: a.address}
+	sampler := &chronySession{network: a.network, address: a.address, fallback: a.fallback}
+	clientSession := &chronySession{network: a.network, address: a.address, fallback: a.fallback}
 	var workers sync.WaitGroup
 	defer func() {
 		cancel()
