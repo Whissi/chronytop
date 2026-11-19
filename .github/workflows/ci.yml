@@ -53,7 +53,6 @@ jobs:
       fail-fast: false
       matrix:
         image:
-          - debian:11  # chrony 4.0
           - debian:12  # chrony 4.3
           - debian:13  # chrony 4.6
           - archlinux:latest  # newest chrony release
@@ -77,13 +76,8 @@ jobs:
           RUN mkdir -p /etc/systemd/system && \
               ln -sf /dev/null /etc/systemd/system/chrony.service && \
               ln -sf /dev/null /etc/systemd/system/chronyd.service
-          # Bullseye is end-of-life, and its packages are leaving the main mirrors.
           RUN if command -v apt-get >/dev/null; then \
                 printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d && \
-                if grep -q bullseye /etc/os-release; then \
-                  rm -f /etc/apt/sources.list.d/* && \
-                  echo 'deb http://archive.debian.org/debian bullseye main' > /etc/apt/sources.list; \
-                fi && \
                 chmod 755 /usr/sbin/policy-rc.d && \
                 apt-get update && \
                 DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends chrony; \

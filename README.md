@@ -12,7 +12,7 @@ Panels resize with the terminal, and can be shown or hidden.
 
 ## Requirements
 
-- Linux, with chronyd 4.0 or later
+- Linux, with chronyd 4.3 or later (older versions may work, but aren't tested)
 - Root (or `sudo`) for the server and offenders panels, or see [Running without root](#running-without-root)
 
 chronytop is a single static binary with no dependencies outside the Go standard library, so it runs on any distribution (Debian, Ubuntu, Fedora, RHEL, Arch, Alpine, etc.). It talks to chronyd directly over its Unix command socket, or over UDP with `-host`; `chronyc` isn't needed.
@@ -95,7 +95,7 @@ Since it usually runs as root, chronytop:
 - Only writes its settings file, and only if you changed a setting. It skips the file and its directories unless they're owned by the user running chronytop (so a non-root `HOME` under `sudo` is ignored), and saves through a temporary file, so it never follows a symlink.
 - Strips non-printable characters from everything it displays, so data from chrony can't inject terminal escape sequences.
 
-CI runs `go vet`, `staticcheck`, `gosec`, and `govulncheck` on every change, and tests against chronyd 4.0, 4.3, 4.6, and the latest release.
+CI runs `go vet`, `staticcheck`, `gosec`, and `govulncheck` on every change, and tests against chronyd 4.3, 4.6, and the latest release.
 
 ## Testing
 
