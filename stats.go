@@ -54,7 +54,7 @@ func (s *Stats) Sample(ctx context.Context, session *chronySession) {
 	now := time.Now()
 	s.sampleChrony(ctx, session)
 	snap := &snapshot{at: now, server: s.Server}
-	if session.network != "udp" {
+	if !isRemote(session.network, session.address) {
 		s.Net = netCounters(s.Iface)
 		snap.net = s.Net
 		snap.cpuBusy, snap.cpuTotal = cpuTicks()

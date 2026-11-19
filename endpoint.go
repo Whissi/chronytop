@@ -10,8 +10,7 @@ import (
 	"strings"
 )
 
-// monitorAddress selects one explicit transport; it never changes the target
-// implicitly when an endpoint is unavailable.
+// monitorAddress returns the transport and address selected by -socket or -host.
 func monitorAddress(socketPath, host string, socketExplicit bool) (string, string, error) {
 	if host == "" {
 		if !filepath.IsAbs(socketPath) {
@@ -24,22 +23,24 @@ func monitorAddress(socketPath, host string, socketExplicit bool) (string, strin
 	}
 	name, port, err := net.SplitHostPort(host)
 	if err != nil {
-		name, port = host, "323"
-		if strings.HasPrefix(name, "[") && strings.HasSuffix(name, "]") {
-			name = name[1 : len(name)-1]
-			if _, err := netip.ParseAddr(name); err != nil {
-				return "", "", fmt.Errorf("invalid -host address %q", host)
-			}
-		} else if _, err := netip.ParseAddr(name); err != nil && strings.ContainsAny(name, ":[]") {
-			return "", "", fmt.Errorf("invalid -host address %q (use host:port or [IPv6]:port)", host)
-		}
+		name, port, err = net.SplitHostPort(host + ":323")
 	}
-	if name == "" || strings.ContainsAny(name, "/\\ \t\r\n") {
-		return "", "", fmt.Errorf("invalid -host address %q", host)
+	if _, ipErr := netip.ParseAddr(host); err != nil && ipErr == nil { // bare IPv6 address
+		name, port, err = host, "323", nil
 	}
-	n, err := strconv.Atoi(port)
-	if err != nil || n < 1 || n > 65535 {
-		return "", "", errors.New("UDP command port must be between 1 and 65535")
+	n, portErr := strconv.Atoi(port)
+	if err != nil || portErr != nil || n < 1 || n > 65535 || name == "" || strings.ContainsAny(name, "/\\ \t\r\n") {
+		return "", "", fmt.Errorf("invalid -host %q (use host, host:port or [IPv6]:port)", host)
 	}
 	return "udp", net.JoinHostPort(name, strconv.Itoa(n)), nil
+}
+
+// isRemote reports whether chronyd may run on another machine, so local panels don't apply.
+func isRemote(network, address string) bool {
+	if network != "udp" {
+		return false
+	}
+	host, _, _ := net.SplitHostPort(address)
+	ip, err := netip.ParseAddr(host)
+	return host != "localhost" && (err != nil || !ip.Unmap().IsLoopback())
 }

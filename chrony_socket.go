@@ -41,6 +41,19 @@ const (
 
 var wire = binary.BigEndian
 
+// Request sizes (padded to the largest reply, as protocol version 6 requires),
+// and data lengths for each accepted reply type.
+var commands = map[uint16]struct {
+	size    int
+	replies map[uint16]int
+}{
+	cmdSources:  {32, map[uint16]int{2: 4}},
+	cmdSource:   {76, map[uint16]int{3: 48}},
+	cmdTracking: {104, map[uint16]int{5: 76}},
+	cmdServer:   {196, map[uint16]int{22: 32, 24: 44, 25: 168}}, // chrony 4.0, 4.2, 4.3+
+	cmdClients:  {520, map[uint16]int{21: 492}},
+}
+
 // chronySession owns one persistent socket. It is used serially by one worker;
 // the sampler and the client-list worker each have their own session.
 type chronySession struct {
@@ -264,25 +277,13 @@ func (c *chronySocket) Close() {
 	}
 }
 
-// query sends only the read-only commands used by this dashboard. Requests are
-// padded to the largest supported reply, as required by protocol version 6.
+// query sends only the read-only commands used by this dashboard.
 func (c *chronySocket) query(command uint16, args ...uint32) ([]byte, uint16, error) {
-	size := 0
-	switch command {
-	case cmdSources:
-		size = 32
-	case cmdSource:
-		size = 76
-	case cmdTracking:
-		size = 104
-	case cmdServer:
-		size = 196
-	case cmdClients:
-		size = 520
-	default:
+	cmd, ok := commands[command]
+	if !ok {
 		return nil, 0, errors.New("unsupported chrony command")
 	}
-	request := make([]byte, size)
+	request := make([]byte, cmd.size)
 	request[0], request[1] = 6, 1
 	wire.PutUint16(request[4:], command)
 	c.sequence++
@@ -341,23 +342,8 @@ func (c *chronySocket) query(command uint16, args ...uint32) ([]byte, uint16, er
 			return nil, 0, &chronyCommandError{command: command, status: status, udp: c.udp}
 		}
 		kind := wire.Uint16(buf[6:])
-		length := 0
-		switch {
-		case command == cmdSources && kind == 2:
-			length = 4
-		case command == cmdSource && kind == 3:
-			length = 48
-		case command == cmdTracking && kind == 5:
-			length = 76
-		case command == cmdClients && kind == 21:
-			length = 492
-		case command == cmdServer && kind == 22:
-			length = 32 // chrony 4.0: eight 32-bit counters
-		case command == cmdServer && kind == 24:
-			length = 44 // chrony 4.2: eleven 32-bit counters
-		case command == cmdServer && kind == 25:
-			length = 168 // chrony 4.3+: 64-bit counters and reserved fields
-		default:
+		length, ok := cmd.replies[kind]
+		if !ok {
 			return nil, 0, fmt.Errorf("unsupported chrony reply %d for %s", kind, chronyCommandName(command))
 		}
 		if n < replyHeader+length {

@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -74,10 +75,18 @@ func main() {
 		fmt.Fprintln(os.Stderr, "chronytop:", err)
 		os.Exit(2)
 	}
+	if network == "unixgram" && !socketFlag {
+		// Like chronyc, use localhost UDP when the default socket isn't accessible.
+		if c, err := openChrony(address); err == nil {
+			c.Close()
+		} else if errors.Is(err, os.ErrPermission) {
+			network, address = "udp", "127.0.0.1:323"
+		}
+	}
 
 	host, _ := os.Hostname()
 	iface := ""
-	if network == "udp" {
+	if isRemote(network, address) {
 		host = address
 	} else {
 		iface = defaultIface()
@@ -235,5 +244,5 @@ func (a *App) handleKey(k byte) bool {
 }
 
 func (a *App) panelAvailable(key string) bool {
-	return a.network != "udp" || (key != "6" && key != "7")
+	return !isRemote(a.network, a.address) || (key != "6" && key != "7")
 }

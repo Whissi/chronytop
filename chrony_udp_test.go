@@ -86,8 +86,8 @@ func TestUDPSamplingAndPersistence(t *testing.T) {
 				if s.socket.dir != "" || s.socket.dirFD != -1 {
 					t.Fatal("UDP created filesystem state")
 				}
-				if stats.MemTotal != 0 || stats.Net != nil || stats.chronydPID != "" {
-					t.Fatal("UDP sampling included local system metrics")
+				if stats.MemTotal == 0 {
+					t.Fatal("loopback UDP sampling skipped local system metrics")
 				}
 				if i == 0 {
 					first = s.socket
@@ -221,6 +221,18 @@ func TestMonitorAddress(t *testing.T) {
 	}
 	if network, address, err := monitorAddress("/custom/chrony.sock", "", true); err != nil || network != "unixgram" || address != "/custom/chrony.sock" {
 		t.Fatalf("socket override: %s %s %v", network, address, err)
+	}
+}
+
+func TestIsRemote(t *testing.T) {
+	for address, want := range map[string]bool{"127.0.0.1:323": false, "[::1]:323": false, "localhost:323": false,
+		"192.0.2.10:323": true, "ntp.example:323": true} {
+		if isRemote("udp", address) != want {
+			t.Errorf("%s: want remote=%v", address, want)
+		}
+	}
+	if isRemote("unixgram", defaultSocket) {
+		t.Error("Unix socket reported as remote")
 	}
 }
 

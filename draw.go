@@ -118,7 +118,8 @@ func (a *App) header(w int) {
 	left := fmt.Sprintf(" chronytop  %s", a.host)
 	if a.network == "udp" {
 		left += "  UDP"
-	} else {
+	}
+	if !isRemote(a.network, a.address) {
 		left += fmt.Sprintf("  up %s  load %s", fmtDur(uptime()), loadAvg())
 	}
 	left += "  " + time.Now().UTC().Format("15:04:05 UTC")

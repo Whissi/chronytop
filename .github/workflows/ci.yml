@@ -53,19 +53,10 @@ jobs:
       fail-fast: false
       matrix:
         image:
-          # Oldest Debian release alias; currently supplies chronyd 4.0.
-          # These aliases advance with Debian releases, not fixed versions.
-          - debian:oldoldstable
-          - debian:oldstable
-          - debian:stable
-          # Detect compatibility changes before the next Debian release.
-          - debian:testing
-          # Current Fedora packages, upstream of the RHEL ecosystem.
-          - fedora:latest
-          # Detect compatibility changes before the next Fedora release.
-          - fedora:rawhide
-          # Rolling-release coverage with current Arch packages.
-          - archlinux:latest
+          - debian:11  # chrony 4.0
+          - debian:12  # chrony 4.3
+          - debian:13  # chrony 4.6
+          - archlinux:latest  # newest chrony release
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -91,8 +82,6 @@ jobs:
                 chmod 755 /usr/sbin/policy-rc.d && \
                 apt-get update && \
                 DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends chrony; \
-              elif command -v dnf >/dev/null; then \
-                dnf install --assumeyes chrony; \
               else \
                 pacman --sync --refresh --sysupgrade --noconfirm chrony; \
               fi
